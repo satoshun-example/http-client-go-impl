@@ -22,6 +22,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer syscall.Shutdown(fd, syscall.SHUT_RDWR)
 	defer syscall.Close(fd)
 
 	// TODO: remove net package
@@ -48,20 +49,23 @@ func main() {
 		panic(err)
 	}
 
-	syscall.Write(fd, []byte("GET / HTTP/1.1\n"))
-	syscall.Write(fd, []byte("Host: "+*host+"\n"))
-	syscall.Write(fd, []byte("User-Agent: Test Client\n"))
-	syscall.Write(fd, []byte("Accept: */*\n\n"))
+	// write request heaader
+	var header []byte
+	header = append(header, []byte("GET / HTTP/1.1\n")...)
+	header = append(header, []byte("Host: "+*host+"\n")...)
+	header = append(header, []byte("User-Agent: Test Client\n")...)
+	header = append(header, []byte("Accept: */*\n\n")...)
+	syscall.Write(fd, header)
 
-	data := make([]byte, 0)
+	var data []byte
 	for {
-		d := make([]byte, 512)
+		d := make([]byte, 255)
 		n, err := syscall.Read(fd, d)
-		if err != nil {
-			panic(err)
-		}
 		if n == 0 {
 			break
+		}
+		if err != nil {
+			panic(err)
 		}
 		data = append(data, d[:n]...)
 	}
