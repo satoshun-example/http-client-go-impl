@@ -20,8 +20,6 @@ import (
 	"unsafe"
 )
 
-var host = flag.String("host", "", "hostname")
-
 func getHostByName(host string) [4]byte {
 	var hints C.struct_addrinfo
 	hints.ai_flags = C.AI_CANONNAME
@@ -53,10 +51,12 @@ func getHostByName(host string) [4]byte {
 
 func main() {
 	flag.Parse()
-
-	if *host == "" {
-		panic("no specify hostname")
+	args := flag.Args()
+	if len(args) < 1 {
+		panic("illegal args")
 	}
+	host := args[0]
+
 	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
 	if err != nil {
 		panic(err)
@@ -64,7 +64,7 @@ func main() {
 	defer syscall.Shutdown(fd, syscall.SHUT_RDWR)
 	defer syscall.Close(fd)
 
-	addr := getHostByName(*host)
+	addr := getHostByName(host)
 	inet4 := &syscall.SockaddrInet4{
 		Port: 80,
 		Addr: addr,
@@ -78,7 +78,7 @@ func main() {
 	// write request heaader
 	var header []byte
 	header = append(header, []byte("GET / HTTP/1.1\n")...)
-	header = append(header, []byte("Host: "+*host+"\n")...)
+	header = append(header, []byte("Host: "+host+"\n")...)
 	header = append(header, []byte("User-Agent: Test Client\n")...)
 	header = append(header, []byte("Accept: */*\n\n")...)
 	syscall.Write(fd, header)
@@ -97,5 +97,6 @@ func main() {
 		}
 		data = append(data, d[:n]...)
 	}
+	// TODO: split header and body
 	fmt.Println(string(data))
 }
