@@ -1,15 +1,55 @@
+// +build cgo,!netgo
+
 package main
+
+/*
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+*/
+import "C"
 
 import (
 	"flag"
-	"log"
-	"net"
-	"strconv"
-	"strings"
+	"fmt"
 	"syscall"
+	"unsafe"
 )
 
 var host = flag.String("host", "", "hostname")
+
+func getHostByName(host string) [4]byte {
+	var hints C.struct_addrinfo
+	hints.ai_flags = C.AI_CANONNAME
+	hints.ai_socktype = C.SOCK_STREAM
+	var res *C.struct_addrinfo
+	h := C.CString(host)
+	defer C.free(unsafe.Pointer(h))
+
+	// TODO: erro handling
+	_, _ = C.getaddrinfo(h, nil, &hints, &res)
+	defer C.freeaddrinfo(res)
+
+	for r := res; r != nil; r = r.ai_next {
+		if r.ai_socktype != C.SOCK_STREAM {
+			continue
+		}
+
+		switch r.ai_family {
+		case C.AF_INET:
+			sa := (*syscall.RawSockaddrInet4)(unsafe.Pointer(r.ai_addr))
+			var addr [4]byte
+			copy(addr[:], sa.Addr[0:4])
+			return addr
+		}
+	}
+
+	return [4]byte{}
+}
 
 func main() {
 	flag.Parse()
@@ -17,7 +57,6 @@ func main() {
 	if *host == "" {
 		panic("no specify hostname")
 	}
-
 	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
 	if err != nil {
 		panic(err)
@@ -25,20 +64,7 @@ func main() {
 	defer syscall.Shutdown(fd, syscall.SHUT_RDWR)
 	defer syscall.Close(fd)
 
-	// TODO: remove net package
-	addrs, err := net.LookupHost(*host)
-	if err != nil {
-		panic(err)
-	}
-
-	var addr [4]byte
-	t := addrs[0]
-	tt := strings.Split(t, ".")
-	for i, v := range tt {
-		vv, _ := strconv.Atoi(v)
-		addr[i] = byte(vv)
-	}
-
+	addr := getHostByName(*host)
 	inet4 := &syscall.SockaddrInet4{
 		Port: 80,
 		Addr: addr,
@@ -71,5 +97,5 @@ func main() {
 		}
 		data = append(data, d[:n]...)
 	}
-	log.Println(string(data))
+	fmt.Println(string(data))
 }
