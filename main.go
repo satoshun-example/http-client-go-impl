@@ -57,6 +57,8 @@ func main() {
 	header = append(header, []byte("Accept: */*\n\n")...)
 	syscall.Write(fd, header)
 
+	syscall.Shutdown(fd, syscall.SHUT_WR)
+
 	var data []byte
 	for {
 		d := make([]byte, 255)
